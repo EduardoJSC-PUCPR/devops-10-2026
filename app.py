@@ -1,29 +1,46 @@
+# Importações:
 from datetime import datetime
-
-import requests
+import requests # HTTP API REST
 from fastapi import FastAPI, HTTPException
 
+# ============================================================
 
+# Configuração e Memória do Programa:
+# MAIUSCULO, Global, Fixo
 APP = FastAPI(title="ServicoTarefa")
 TAREFAS = []
 PROXIMO_ID = 0
+# Serviço Separado para Notificações
 SERVICO_NOTIFICACAO_URL = "http://localhost:8000/notificar"
 
+# ============================================================
 
+# Funções Auxiliares:
+# Define Função para ser Chamado
+# Pega Parâmetros (Título, Descrição)
+# Retorna Dicionário (Conjunto de Chave: Valor)
 def criar_tarefa(titulo: str, descricao: str) -> dict:
-    global PROXIMO_ID
+    global PROXIMO_ID # Chama ID Global
 
+    # Dicionário/Estrutura da Tarefa da Array TAREFAS
     tarefa = {
-        "id": PROXIMO_ID,
-        "titulo": titulo,
-        "descricao": descricao,
-        "concluida": False,
-        "criada_em": datetime.now(),
-        "concluida_em": None,
+        "id": PROXIMO_ID,            # ID Global
+        "titulo": titulo,            # Parâmetro
+        "descricao": descricao,      # Parâmetro
+        "concluida": False,          # Flag
+        "criada_em": datetime.now(), # Timestamp 
+        "concluida_em": None,        # Timestamp 
     }
-    PROXIMO_ID += 1
-    return tarefa
+    PROXIMO_ID += 1 # Incrementa ID Global para Próxima Tarefa
+    return tarefa   # Envia Estrutura para Função Chamadora
 
+# ============================================================
+
+# Rotas
+# @ - Decorador para Endereço URL, Verbo HTTP, ID Endpoint, Parâmetros Padrão
+# async - ASSÍNCRONO, Resposta Rápida, Não Bloqueia Servidor, Conexões Simultâneas
+# list[dict[,]] - Lista de Dicionários, Chave: Valor
+# return [{:} for in] - Retorna Lista de Dicionários, Cada Tarefa com ID e Título
 
 @APP.get("/tarefas")
 async def tarefas() -> list[dict[int, str]]:
