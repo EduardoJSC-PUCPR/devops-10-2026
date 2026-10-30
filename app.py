@@ -96,3 +96,9 @@ async def apagar_tarefa(tarefa_id: int = Path(alias="id")) -> dict[str, str]:
 async def index() -> dict[str, str]:
     """Retorna a mensagem inicial da API."""
     return {"mensagem": "Olá, mundo!"}
+
+
+@APP.get("/autor")
+async def autor() -> dict[str, str]:
+    """Retorna o nome completo do autor da API."""
+    return {"mensagem": "EDUARDO JOSÉ SKURA CZERNIAK"}
