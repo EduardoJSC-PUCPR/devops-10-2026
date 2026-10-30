@@ -1,70 +1,59 @@
-# Importações:
+"""API de gerenciamento de tarefas e envio de notificações."""
+
 from datetime import datetime
-import requests # HTTP API REST
-from fastapi import FastAPI, HTTPException
 
-# ============================================================
+import requests
+from fastapi import FastAPI, HTTPException, Path
 
-# Configuração e Memória do Programa:
-# MAIUSCULO, Global, Fixo
 APP = FastAPI(title="ServicoTarefa")
 TAREFAS = []
-PROXIMO_ID = 0
-# Serviço Separado para Notificações
+APP.state.proximo_id = 0
 SERVICO_NOTIFICACAO_URL = "http://localhost:8000/notificar"
 
-# ============================================================
 
-# Funções Auxiliares:
-# Define Função para ser Chamado
-# Pega Parâmetros (Título, Descrição)
-# Retorna Dicionário (Conjunto de Chave: Valor)
 def criar_tarefa(titulo: str, descricao: str) -> dict:
-    global PROXIMO_ID # Chama ID Global
+    """Cria uma tarefa com identificador e timestamps."""
+    tarefa_id = APP.state.proximo_id
 
-    # Dicionário/Estrutura da Tarefa da Array TAREFAS
     tarefa = {
-        "id": PROXIMO_ID,            # ID Global
-        "titulo": titulo,            # Parâmetro
-        "descricao": descricao,      # Parâmetro
-        "concluida": False,          # Flag
-        "criada_em": datetime.now(), # Timestamp 
-        "concluida_em": None,        # Timestamp 
+        "id": tarefa_id,
+        "titulo": titulo,
+        "descricao": descricao,
+        "concluida": False,
+        "criada_em": datetime.now(),
+        "concluida_em": None,
     }
-    PROXIMO_ID += 1 # Incrementa ID Global para Próxima Tarefa
-    return tarefa   # Envia Estrutura para Função Chamadora
+    APP.state.proximo_id += 1
+    return tarefa
 
-# ============================================================
-
-# Rotas
-# @ - Decorador para Endereço URL, Verbo HTTP, ID Endpoint, Parâmetros Padrão
-# async - ASSÍNCRONO, Resposta Rápida, Não Bloqueia Servidor, Conexões Simultâneas
-# list[dict[,]] - Lista de Dicionários, Chave: Valor
-# return [{:} for in] - Retorna Lista de Dicionários, Cada Tarefa com ID e Título
 
 @APP.get("/tarefas")
 async def tarefas() -> list[dict[int, str]]:
+    """Lista as tarefas pelo identificador e título."""
     return [{tarefa["id"]: tarefa["titulo"]} for tarefa in TAREFAS]
 
 
 @APP.post("/tarefas")
 async def post_tarefa(titulo: str, descricao: str) -> dict[str, str]:
+    """Cria uma tarefa."""
     TAREFAS.append(criar_tarefa(titulo, descricao))
     return {"mensagem": "OK"}
 
 
 @APP.get("/tarefas/{id}")
-async def tarefa_especifica(id: int) -> dict:
+async def tarefa_especifica(tarefa_id: int = Path(alias="id")) -> dict:
+    """Retorna uma tarefa pelo identificador."""
     for tarefa in TAREFAS:
-        if tarefa["id"] == id:
+        if tarefa["id"] == tarefa_id:
             return tarefa
     raise HTTPException(status_code=404, detail="Tarefa não existe")
 
 
 @APP.put("/tarefas/{id}")
-def concluir_tarefa(id: int) -> dict[str, str]:
+def concluir_tarefa(tarefa_id: int = Path(alias="id")) -> dict[str, str]:
+    """Conclui uma tarefa e solicita o envio de uma notificação."""
     tarefa_encontrada = next(
-        (tarefa for tarefa in TAREFAS if tarefa["id"] == id),
+        (tarefa for tarefa in TAREFAS if tarefa["id"] == tarefa_id),
         None,
     )
     if tarefa_encontrada is None:
@@ -75,7 +64,7 @@ def concluir_tarefa(id: int) -> dict[str, str]:
             resposta = requests.post(
                 SERVICO_NOTIFICACAO_URL,
                 params={
-                    "id": id,
+                    "id": tarefa_id,
                     "titulo": tarefa_encontrada["titulo"],
                 },
                 timeout=10,
@@ -94,9 +83,10 @@ def concluir_tarefa(id: int) -> dict[str, str]:
 
 
 @APP.delete("/tarefas/{id}")
-async def apagar_tarefa(id: int) -> dict[str, str]:
+async def apagar_tarefa(tarefa_id: int = Path(alias="id")) -> dict[str, str]:
+    """Exclui uma tarefa pelo identificador."""
     for indice, tarefa in enumerate(TAREFAS):
-        if tarefa["id"] == id:
+        if tarefa["id"] == tarefa_id:
             del TAREFAS[indice]
             return {"mensagem": "Tarefa apagada"}
     raise HTTPException(status_code=404, detail="Tarefa não existe")
@@ -104,4 +94,5 @@ async def apagar_tarefa(id: int) -> dict[str, str]:
 
 @APP.get("/")
 async def index() -> dict[str, str]:
+    """Retorna a mensagem inicial da API."""
     return {"mensagem": "Olá, mundo!"}

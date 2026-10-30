@@ -9,10 +9,10 @@ CLIENT = TestClient(app.APP)
 @pytest.fixture(autouse=True)
 def reset_tarefas():
     app.TAREFAS.clear()
-    app.PROXIMO_ID = 0
+    app.APP.state.proximo_id = 0
     yield
     app.TAREFAS.clear()
-    app.PROXIMO_ID = 0
+    app.APP.state.proximo_id = 0
 
 
 def test_index():
