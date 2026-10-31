@@ -1,12 +1,13 @@
 from datetime import datetime
 
-import app.api as api
-from app.modelo import Tarefa
 import pytest
 import requests
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
+
+import app.api as api
+from app.modelo import Tarefa
 
 CLIENT = TestClient(api.APP)
 
@@ -35,6 +36,10 @@ def test_index():
     resposta = CLIENT.get("/")
     assert resposta.status_code == 200
     assert resposta.json() == {"mensagem": "Olá, mundo!"}
+
+
+def test_engine_usa_postgresql_com_psycopg():
+    assert api.ENGINE.url.drivername == "postgresql+psycopg"
 
 
 def test_listar_tarefas():

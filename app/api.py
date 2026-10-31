@@ -1,18 +1,45 @@
 """API de gerenciamento de tarefas e envio de notificações."""
 
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Annotated
 
 import requests
 from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.engine import URL
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .modelo import Tarefa
 
+DATABASE_USERNAME = os.getenv("DATABASE_USERNAME")
+DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
+DATABASE_ADDRESS = os.getenv("DATABASE_ADDRESS")
+DATABASE = os.getenv("DATABASE")
+
+database_settings = {
+    "DATABASE_USERNAME": DATABASE_USERNAME,
+    "DATABASE_PASSWORD": DATABASE_PASSWORD,
+    "DATABASE_ADDRESS": DATABASE_ADDRESS,
+    "DATABASE": DATABASE,
+}
+missing_settings = [
+    name for name, value in database_settings.items() if not value
+]
+if missing_settings:
+    raise RuntimeError(
+        "Variáveis de ambiente do PostgreSQL não configuradas: "
+        + ", ".join(missing_settings)
+    )
+
 ENGINE = create_engine(
-    "sqlite:///banco.db",
-    connect_args={"check_same_thread": False},
+    URL.create(
+        "postgresql+psycopg",
+        username=DATABASE_USERNAME,
+        password=DATABASE_PASSWORD,
+        host=DATABASE_ADDRESS,
+        database=DATABASE,
+    )
 )
 SERVICO_NOTIFICACAO_URL = "http://localhost:8000/notificar"
 

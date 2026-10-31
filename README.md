@@ -6,7 +6,7 @@
 - O Nginx encaminha `/tarefas` para o ServiçoTarefa (`app/api.py`) na porta `8001`.
 - O Nginx encaminha `/notificar` para o ServiçoNotificacao (`app/notificacao.py`) na porta `8002`.
 - Ao concluir uma tarefa, o ServiçoTarefa chama `http://localhost:8000/notificar`; o Nginx encaminha essa chamada para a porta `8002`. A mensagem aparece no terminal do ServiçoNotificacao.
-- As tarefas são persistidas no banco SQLite `banco.db`.
+- As tarefas são persistidas em um banco PostgreSQL usando o driver Psycopg 3.
 
 ## Executar localmente
 
@@ -15,6 +15,18 @@ Instale as dependências:
 ```bash
 pip install -r requirements.txt
 ```
+
+Configure as credenciais e o endereço do PostgreSQL. `DATABASE_ADDRESS` deve
+ser o host do servidor; a porta padrão do PostgreSQL (`5432`) será usada.
+
+```bash
+export DATABASE_USERNAME="seu_usuario"
+export DATABASE_PASSWORD="sua_senha"
+export DATABASE_ADDRESS="localhost"
+export DATABASE="nome_do_banco"
+```
+
+O banco deve existir e estar acessível antes de iniciar o ServiçoTarefa.
 
 Inicie cada serviço em um terminal separado:
 
@@ -40,6 +52,18 @@ O Nginx fica disponível em `http://localhost:8000`. Confirme o proxy para os do
 ```bash
 curl "http://localhost:8000/tarefas"
 curl -X POST "http://localhost:8000/notificar?id=1&titulo=Teste"
+```
+
+Os testes usam um banco SQLite isolado e não precisam de um servidor PostgreSQL.
+Como a API valida a configuração ao importar, forneça valores de teste ao
+executar a suíte:
+
+```bash
+DATABASE_USERNAME=mock \
+DATABASE_PASSWORD=mock \
+DATABASE_ADDRESS=localhost \
+DATABASE=mock \
+pytest
 ```
 
 Se `/tarefas` retornar `502 Bad Gateway`, verifique se o ServiçoTarefa está rodando na porta `8001`. Para conferir os processos nas portas usadas:
