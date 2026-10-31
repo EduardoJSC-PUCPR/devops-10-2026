@@ -3,9 +3,10 @@
 ## Arquitetura
 
 - O cliente cURL acessa o Nginx na porta `8000`.
-- O Nginx encaminha `/tarefas` para o ServiçoTarefa (`app.py`) na porta `8001`.
-- O Nginx encaminha `/notificar` para o ServiçoNotificacao (`notificacao.py`) na porta `8002`.
+- O Nginx encaminha `/tarefas` para o ServiçoTarefa (`app/api.py`) na porta `8001`.
+- O Nginx encaminha `/notificar` para o ServiçoNotificacao (`app/notificacao.py`) na porta `8002`.
 - Ao concluir uma tarefa, o ServiçoTarefa chama `http://localhost:8000/notificar`; o Nginx encaminha essa chamada para a porta `8002`. A mensagem aparece no terminal do ServiçoNotificacao.
+- As tarefas são persistidas no banco SQLite `banco.db`.
 
 ## Executar localmente
 
@@ -18,11 +19,11 @@ pip install -r requirements.txt
 Inicie cada serviço em um terminal separado:
 
 ```bash
-fastapi dev --port 8001 app.py
+fastapi dev --port 8001 app/api.py
 ```
 
 ```bash
-fastapi dev --port 8002 notificacao.py
+fastapi dev --port 8002 app/notificacao.py
 ```
 
 Copie a configuração do Nginx, valide-a e reinicie o serviço:
@@ -59,11 +60,11 @@ curl -X POST "http://localhost:8000/tarefas?titulo=Estudar&descricao=Revisar%20m
 curl "http://localhost:8000/tarefas"
 
 # Consultar tarefa
-curl "http://localhost:8000/tarefas/0"
+curl "http://localhost:8000/tarefas/1"
 
 # Concluir tarefa; a notificação aparece no terminal do ServiçoNotificacao
-curl -X PUT "http://localhost:8000/tarefas/0"
+curl -X PUT "http://localhost:8000/tarefas/1"
 
 # Excluir tarefa
-curl -X DELETE "http://localhost:8000/tarefas/0"
+curl -X DELETE "http://localhost:8000/tarefas/1"
 ```

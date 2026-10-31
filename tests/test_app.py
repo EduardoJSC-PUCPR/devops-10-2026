@@ -1,31 +1,40 @@
-import app
+from datetime import datetime
+
+import app.api as api
+from app.modelo import Tarefa
 import pytest
 import requests
 from fastapi.testclient import TestClient
+from sqlalchemy.pool import StaticPool
+from sqlmodel import SQLModel, Session, create_engine
 
-CLIENT = TestClient(app.APP)
+CLIENT = TestClient(api.APP)
 
 
 @pytest.fixture(autouse=True)
-def reset_tarefas():
-    app.TAREFAS.clear()
-    app.APP.state.proximo_id = 0
+def reset_database():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    def get_test_session():
+        with Session(engine) as session:
+            yield session
+
+    api.APP.dependency_overrides[api.get_session] = get_test_session
     yield
-    app.TAREFAS.clear()
-    app.APP.state.proximo_id = 0
+    api.APP.dependency_overrides.clear()
+    SQLModel.metadata.drop_all(engine)
+    engine.dispose()
 
 
 def test_index():
     resposta = CLIENT.get("/")
     assert resposta.status_code == 200
     assert resposta.json() == {"mensagem": "Olá, mundo!"}
-
-
-def test_autor():
-    resposta = CLIENT.get("/autor")
-
-    assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "EDUARDO JOSÉ SKURA CZERNIAK"}
 
 
 def test_listar_tarefas():
@@ -37,7 +46,14 @@ def test_listar_tarefas():
     resposta = CLIENT.get("/tarefas")
 
     assert resposta.status_code == 200
-    assert resposta.json() == [{"0": "Estudar"}]
+    assert resposta.json() == [{"1": "Estudar"}]
+
+
+def test_listar_tarefas_vazia():
+    resposta = CLIENT.get("/tarefas")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == []
 
 
 def test_criar_tarefa():
@@ -46,13 +62,39 @@ def test_criar_tarefa():
         params={"titulo": "Estudar", "descricao": "Revisar testes"},
     )
 
-    assert resposta.status_code == 200
+    assert resposta.status_code == 201
     assert resposta.json() == {"mensagem": "OK"}
-    assert len(app.TAREFAS) == 1
-    assert app.TAREFAS[0]["titulo"] == "Estudar"
-    assert app.TAREFAS[0]["descricao"] == "Revisar testes"
-    assert app.TAREFAS[0]["concluida"] is False
-    assert app.TAREFAS[0]["concluida_em"] is None
+    tarefa = CLIENT.get("/tarefas/1").json()
+    assert tarefa["titulo"] == "Estudar"
+    assert tarefa["descricao"] == "Revisar testes"
+    assert tarefa["concluida"] is False
+    assert tarefa["data_conclusao"] is None
+    assert datetime.fromisoformat(tarefa["data_criacao"]).microsecond == 0
+
+
+def test_criar_tarefa_sem_descricao():
+    resposta = CLIENT.post("/tarefas", params={"titulo": "Estudar"})
+
+    assert resposta.status_code == 201
+    assert CLIENT.get("/tarefas/1").json()["descricao"] is None
+
+
+def test_obter_tarefa():
+    CLIENT.post(
+        "/tarefas",
+        params={"titulo": "Estudar", "descricao": "Revisar testes"},
+    )
+
+    resposta = CLIENT.get("/tarefas/1")
+
+    assert resposta.status_code == 200
+    tarefa = resposta.json()
+    assert tarefa["id"] == 1
+    assert tarefa["titulo"] == "Estudar"
+    assert tarefa["descricao"] == "Revisar testes"
+    assert tarefa["concluida"] is False
+    assert datetime.fromisoformat(tarefa["data_criacao"]).microsecond == 0
+    assert tarefa["data_conclusao"] is None
 
 
 def test_concluir_tarefa(monkeypatch):
@@ -72,35 +114,23 @@ def test_concluir_tarefa(monkeypatch):
         requisicao_notificacao["timeout"] = timeout
         return RespostaNotificacao()
 
-    monkeypatch.setattr(app.requests, "post", enviar_notificacao)
+    monkeypatch.setattr(api.requests, "post", enviar_notificacao)
 
-    resposta = CLIENT.put("/tarefas/0")
+    resposta = CLIENT.put("/tarefas/1")
 
     assert resposta.status_code == 200
     assert resposta.json() == {"mensagem": "Tarefa atualizada"}
-    assert app.TAREFAS[0]["concluida"] is True
-    assert app.TAREFAS[0]["concluida_em"] is not None
-    assert requisicao_notificacao == {
-        "url": app.SERVICO_NOTIFICACAO_URL,
-        "params": {"id": 0, "titulo": "Estudar"},
-        "timeout": 10,
-    }
-
-
-def test_obter_tarefa():
-    CLIENT.post(
-        "/tarefas",
-        params={"titulo": "Estudar", "descricao": "Revisar testes"},
+    resposta_tarefa = CLIENT.get("/tarefas/1")
+    assert resposta_tarefa.json()["concluida"] is True
+    assert isinstance(
+        datetime.fromisoformat(resposta_tarefa.json()["data_conclusao"]),
+        datetime,
     )
-
-    resposta = CLIENT.get("/tarefas/0")
-
-    assert resposta.status_code == 200
-    assert resposta.json()["id"] == 0
-    assert resposta.json()["titulo"] == "Estudar"
-    assert resposta.json()["descricao"] == "Revisar testes"
-    assert resposta.json()["concluida"] is False
-    assert resposta.json()["concluida_em"] is None
+    assert requisicao_notificacao == {
+        "url": api.SERVICO_NOTIFICACAO_URL,
+        "params": {"id": 1, "titulo": "Estudar"},
+        "timeout": 1,
+    }
 
 
 def test_excluir_tarefa():
@@ -109,32 +139,47 @@ def test_excluir_tarefa():
         params={"titulo": "Estudar", "descricao": "Revisar testes"},
     )
 
-    resposta = CLIENT.delete("/tarefas/0")
+    resposta = CLIENT.delete("/tarefas/1")
 
     assert resposta.status_code == 200
     assert resposta.json() == {"mensagem": "Tarefa apagada"}
-    assert app.TAREFAS == []
+    assert CLIENT.get("/tarefas").json() == []
 
 
 def test_id_inexistente():
-    assert CLIENT.get("/tarefas/999").status_code == 404
-    assert CLIENT.put("/tarefas/999").status_code == 404
-    assert CLIENT.delete("/tarefas/999").status_code == 404
+    obter = CLIENT.get("/tarefas/999")
+    concluir = CLIENT.put("/tarefas/999")
+    excluir = CLIENT.delete("/tarefas/999")
+
+    assert obter.status_code == 404
+    assert obter.json() == {"detail": "Tarefa não existe"}
+    assert concluir.status_code == 404
+    assert concluir.json() == {"detail": "Tarefa não existe"}
+    assert excluir.status_code == 404
+    assert excluir.json() == {"detail": "Tarefa não existe"}
 
 
 def test_notificacao_fora_do_ar(monkeypatch):
     def falhar(*args, **kwargs):
         raise requests.ConnectionError("serviço fora do ar")
 
-    monkeypatch.setattr(app.requests, "post", falhar)
+    monkeypatch.setattr(api.requests, "post", falhar)
 
     CLIENT.post(
         "/tarefas",
         params={"titulo": "Teste", "descricao": "x"},
     )
 
-    resposta = CLIENT.put("/tarefas/0")
+    resposta = CLIENT.put("/tarefas/1")
 
     assert resposta.status_code == 502
-    assert app.TAREFAS[0]["concluida"] is False
-    assert app.TAREFAS[0]["concluida_em"] is None
+    tarefa = CLIENT.get("/tarefas/1").json()
+    assert tarefa["concluida"] is False
+    assert tarefa["data_conclusao"] is None
+
+
+def test_autor():
+    resposta = CLIENT.get("/autor")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"mensagem": "Eduardo José Skura Czerniak"}
