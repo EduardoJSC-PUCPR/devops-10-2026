@@ -36,7 +36,7 @@ jobs:
         DATABASE_ADDRESS: mock
         DATABASE: mock
       run: |
-        pytest --rootdir app
+        pytest -vv
   entrega:
     name: entrega (push)
     needs: build
