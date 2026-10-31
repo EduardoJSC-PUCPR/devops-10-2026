@@ -38,6 +38,7 @@ jobs:
       run: |
         pytest --rootdir app
   entrega:
+    name: entrega (push)
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
