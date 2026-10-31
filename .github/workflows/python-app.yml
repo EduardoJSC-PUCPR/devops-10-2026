@@ -49,11 +49,11 @@ jobs:
       - name: Autenticação no Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USER }}
+          username: eduardojscpucbr
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build e push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ vars.DOCKERHUB_USER }}/tarefas:2.0
+          tags: eduardojscpucbr/tarefas:2.0
