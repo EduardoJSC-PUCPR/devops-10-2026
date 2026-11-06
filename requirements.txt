@@ -7,4 +7,5 @@ bandit
 ruff
 sqlmodel
 sqlalchemy
+pymysql
 psycopg[binary]
