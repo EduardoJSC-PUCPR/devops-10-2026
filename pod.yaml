@@ -8,8 +8,8 @@ spec:
     aplicacao: web
   ports:
     - name: http
-      port: 8000
-      targetPort: 8000
+      port: 8000        # porta do Service (pode continuar 8000)
+      targetPort: 8001  # porta real da aplicação
       nodePort: 30000
 ---
 apiVersion: v1
@@ -19,49 +19,26 @@ metadata:
   labels:
     aplicacao: web
 spec:
+  initContainers:
+    - name: espera-banco
+      image: postgres:17
+      command: ["sh", "-c", "until pg_isready -h svc-banco.default.svc.cluster.local -p 5432 -U devops; do echo aguardando banco; sleep 2; done"]
   containers:
     - image: eduardojscpucbr/tarefas:2.0
       name: web
       ports:
-        - containerPort: 8000
+        - containerPort: 8001
+      readinessProbe:
+        tcpSocket:
+          port: 8001
+        initialDelaySeconds: 3
+        periodSeconds: 5
       env:
         - name: DATABASE
           value: devops
-        - name: DATABASE_PASSWORD 
+        - name: DATABASE_PASSWORD
           value: password
         - name: DATABASE_ADDRESS
           value: svc-banco.default.svc.cluster.local
         - name: DATABASE_USERNAME
           value: devops
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: svc-banco
-spec:
-  selector:
-    aplicacao: banco
-  ports:
-    - name: sql
-      port: 8080
-      targetPort: 8080
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: banco
-  labels:
-    aplicacao: banco
-spec:
-  containers:
-    - name: postgres
-      image: postgres
-      env:
-        - name: POSTGRES_USER
-          value: devops
-        - name: POSTGRES_PASSWORD
-          value: password
-        - name: POSTGRES_DB
-          value: devops
-      ports:
-        - containerPort: 8080

@@ -2,15 +2,18 @@
 
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import requests
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from sqlalchemy.engine import URL
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from .log import LOGGER
 from .modelo import Tarefa
+
+# ---------------------------------------------------------------- banco
 
 DATABASE_USERNAME = os.getenv("DATABASE_USERNAME")
 DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
@@ -26,6 +29,8 @@ database_settings = {
 missing_settings = [
     name for name, value in database_settings.items() if not value
 ]
+for name in missing_settings:
+    LOGGER.critical("%s está faltando", name)
 if missing_settings:
     raise RuntimeError(
         "Variáveis de ambiente do PostgreSQL não configuradas: "
@@ -63,15 +68,32 @@ async def lifespan(_app: FastAPI):
 APP = FastAPI(title="ServicoTarefa", lifespan=lifespan)
 
 
+@APP.middleware("http")
+async def registrar_acessos(request: Request, call_next):
+    """Registra acessos às rotas e erros de caminhos inexistentes."""
+    resposta = await call_next(request)
+
+    if resposta.status_code == 404 and request.scope.get("route") is None:
+        LOGGER.error(
+            "Rota inexistente: %s %s", request.method, request.url.path
+        )
+    else:
+        LOGGER.info(
+            "Acesso: %s %s -> %s",
+            request.method,
+            request.url.path,
+            resposta.status_code,
+        )
+    return resposta
+
+
+# GET /tarefas: lista todas as tarefas (objeto completo)
 @APP.get("/tarefas")
-def tarefas(session: SessionDependency) -> list[dict[int, str]]:
-    """Lista as tarefas pelo identificador e título."""
-    tarefas_salvas = session.exec(select(Tarefa)).all()
-    return [
-        {tarefa.id: tarefa.titulo}
-        for tarefa in tarefas_salvas
-        if tarefa.id is not None
-    ]
+def tarefas(session: SessionDependency) -> list[dict[str, str]]:
+    """Lista todas as tarefas."""
+    lista_tarefas = session.exec(select(Tarefa)).all()
+
+    return [{str(tarefa.id): tarefa.titulo} for tarefa in lista_tarefas]
 
 
 @APP.post("/tarefas", status_code=201)
@@ -84,10 +106,20 @@ def post_tarefa(
     tarefa = Tarefa(
         titulo=titulo,
         descricao=descricao,
-        data_criacao=datetime.now(timezone.utc).replace(microsecond=0),
+        data_criacao=datetime.now(timezone(timedelta(hours=-3))).replace(microsecond=0),
     )
     session.add(tarefa)
     session.commit()
+    session.refresh(tarefa)
+
+    LOGGER.info("Tarefa criada: id=%s", tarefa.id)
+    LOGGER.debug(
+        "Dados da tarefa criada: id=%s titulo=%r descricao=%r data_criacao=%s",
+        tarefa.id,
+        tarefa.titulo,
+        tarefa.descricao,
+        tarefa.data_criacao,
+    )
     return {"mensagem": "OK"}
 
 

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import pytest
@@ -6,10 +7,27 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-import app.api as api
-from app.modelo import Tarefa
+from app import api
+from app.log import LOGGER
 
 CLIENT = TestClient(api.APP)
+
+
+def test_timestamp_dos_logs_usa_utc_menos_tres():
+    registro = logging.LogRecord(
+        name="devops",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="teste",
+        args=(),
+        exc_info=None,
+    )
+    registro.created = 0
+    formatador = LOGGER.handlers[0].formatter
+
+    assert formatador is not None
+    assert "1969-12-31 21:00:00 -03:00" in formatador.format(registro)
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +100,43 @@ def test_criar_tarefa_sem_descricao():
 
     assert resposta.status_code == 201
     assert CLIENT.get("/tarefas/1").json()["descricao"] is None
+
+
+def test_criar_tarefa_registra_info_e_debug(caplog):
+    with caplog.at_level(logging.DEBUG, logger="devops"):
+        resposta = CLIENT.post(
+            "/tarefas",
+            params={"titulo": "Estudar", "descricao": "Revisar testes"},
+        )
+
+    assert resposta.status_code == 201
+    mensagens = [registro.getMessage() for registro in caplog.records]
+    assert "Tarefa criada: id=1" in mensagens
+    assert "Acesso: POST /tarefas -> 201" in mensagens
+    assert any(
+        registro.levelno == logging.DEBUG
+        and "Dados da tarefa criada: id=1 titulo='Estudar'" in registro.getMessage()
+        for registro in caplog.records
+    )
+
+
+def test_registra_rota_inexistente_com_error_e_id_inexistente_com_info(caplog):
+    with caplog.at_level(logging.DEBUG, logger="devops"):
+        rota_inexistente = CLIENT.get("/nao-existe")
+        tarefa_inexistente = CLIENT.get("/tarefas/999")
+
+    assert rota_inexistente.status_code == 404
+    assert tarefa_inexistente.status_code == 404
+    assert any(
+        registro.levelno == logging.ERROR
+        and registro.getMessage() == "Rota inexistente: GET /nao-existe"
+        for registro in caplog.records
+    )
+    assert any(
+        registro.levelno == logging.INFO
+        and registro.getMessage() == "Acesso: GET /tarefas/999 -> 404"
+        for registro in caplog.records
+    )
 
 
 def test_obter_tarefa():
