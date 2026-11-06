@@ -8,6 +8,7 @@ FUSO_HORARIO = timezone(timedelta(hours=-3))
 
 
 def converter_horario(timestamp: float) -> struct_time:
+    """Converte um timestamp para o fuso horário UTC-3."""
     return datetime.fromtimestamp(timestamp, FUSO_HORARIO).timetuple()
 
 
