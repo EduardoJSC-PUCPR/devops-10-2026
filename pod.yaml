@@ -8,8 +8,8 @@ spec:
     aplicacao: web
   ports:
     - name: http
-      port: 80
-      targetPort: 80
+      port: 8000
+      targetPort: 8000
       nodePort: 30000
 ---
 apiVersion: v1
@@ -20,7 +20,48 @@ metadata:
     aplicacao: web
 spec:
   containers:
-    - image: nginx
+    - image: eduardojscpucbr/tarefas:2.0
       name: web
       ports:
-        - containerPort: 80
+        - containerPort: 8000
+      env:
+        - name: DATABASE
+          value: devops
+        - name: DATABASE_PASSWORD 
+          value: password
+        - name: DATABASE_ADDRESS
+          value: svc-banco.default.svc.cluster.local
+        - name: DATABASE_USERNAME
+          value: devops
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-banco
+spec:
+  selector:
+    aplicacao: banco
+  ports:
+    - name: sql
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: banco
+  labels:
+    aplicacao: banco
+spec:
+  containers:
+    - name: postgres
+      image: postgres
+      env:
+        - name: POSTGRES_USER
+          value: devops
+        - name: POSTGRES_PASSWORD
+          value: password
+        - name: POSTGRES_DB
+          value: devops
+      ports:
+        - containerPort: 8080
